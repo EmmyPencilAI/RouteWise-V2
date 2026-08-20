@@ -14,15 +14,15 @@ import { CitySelectorModal } from './components/modals/CitySelectorModal';
 import { OnboardingModal } from './components/modals/OnboardingModal';
 
 // Data & Types
-import { NIGERIAN_CITIES } from './data/cities';
-import { POPULAR_PRESET_ROUTES, generateLocalRoute } from './data/defaultRoutes';
+import { COUNTRIES_DATA, getCityById, getCountryById } from './data/cities';
+import { generateLocalRoute } from './data/defaultRoutes';
 import { INITIAL_COMMUNITY_POSTS } from './data/communityData';
 import { 
   CityConfig, 
+  CountryConfig,
   RouteOption, 
   CommunityPost, 
-  UserProfile, 
-  TransportMode 
+  UserProfile 
 } from './types';
 
 const INITIAL_PROFILE: UserProfile = {
@@ -36,31 +36,38 @@ const INITIAL_PROFILE: UserProfile = {
     { id: 'b3', title: 'Road Hero', icon: '🚦' },
   ],
   savedRoutes: [
-    { id: 'sr-1', from: 'Ojota', to: 'Yaba', label: 'Home → Work' },
-    { id: 'sr-2', from: 'Ikeja', to: 'Lekki Phase 1', label: 'Home → Client' },
+    { id: 'sr-1', from: 'Ojota', to: 'Yaba', label: 'Home → Work', cityId: 'lagos' },
+    { id: 'sr-2', from: 'Ikeja', to: 'Lekki Phase 1', label: 'Home → Client', cityId: 'lagos' },
   ],
   tripHistory: [
-    { id: 'th-1', from: 'Ojota', to: 'Yaba', date: 'Yesterday', farePaid: 900, mode: 'Danfo' },
-    { id: 'th-2', from: 'Ikeja', to: 'CMS', date: '2 days ago', farePaid: 800, mode: 'Danfo' },
+    { id: 'th-1', from: 'Ojota', to: 'Yaba', date: 'Yesterday', farePaid: 900, currencySymbol: '₦', mode: 'Danfo' },
+    { id: 'th-2', from: 'Ikeja', to: 'CMS', date: '2 days ago', farePaid: 800, currencySymbol: '₦', mode: 'Danfo' },
   ],
   emergencyContacts: [
     { id: 'ec-1', name: 'Sister Chidinma', phone: '08031234567', relationship: 'Family' },
     { id: 'ec-2', name: 'Brother Femi', phone: '08129876543', relationship: 'Family' },
   ],
   dataSaverMode: false,
-  selectedCity: 'lagos',
+  selectedCountryId: 'nigeria',
+  selectedCityId: 'lagos',
 };
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('home');
-  const [selectedCityId, setSelectedCityId] = useState<string>('lagos');
+  const [selectedCountryId, setSelectedCountryId] = useState<string>(() => {
+    return localStorage.getItem('routewise_country') || 'nigeria';
+  });
+  const [selectedCityId, setSelectedCityId] = useState<string>(() => {
+    return localStorage.getItem('routewise_city') || 'lagos';
+  });
+
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     const cached = localStorage.getItem('routewise_profile');
     return cached ? JSON.parse(cached) : INITIAL_PROFILE;
   });
 
   const [currentRoute, setCurrentRoute] = useState<RouteOption | null>(() => {
-    return POPULAR_PRESET_ROUTES['Ojota-Yaba'] || generateLocalRoute('Ojota', 'Yaba', 'lagos');
+    return generateLocalRoute('Ojota', 'Yaba', 'lagos');
   });
 
   const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>(() => {
@@ -79,7 +86,7 @@ export default function App() {
 
   // Quick fare route label state
   const [quickFareRouteLabel, setQuickFareRouteLabel] = useState('Ojota → Yaba');
-  const [quickFareMode, setQuickFareMode] = useState<TransportMode>('Danfo');
+  const [quickFareMode, setQuickFareMode] = useState<string>('Danfo');
 
   // Network & Cache state
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -93,6 +100,11 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('routewise_community', JSON.stringify(communityPosts));
   }, [communityPosts]);
+
+  useEffect(() => {
+    localStorage.setItem('routewise_country', selectedCountryId);
+    localStorage.setItem('routewise_city', selectedCityId);
+  }, [selectedCountryId, selectedCityId]);
 
   // Online / offline listeners
   useEffect(() => {
@@ -112,11 +124,12 @@ export default function App() {
     };
   }, []);
 
-  const currentCity = NIGERIAN_CITIES.find((c) => c.id === selectedCityId) || NIGERIAN_CITIES[0];
+  const currentCountry: CountryConfig = getCountryById(selectedCountryId);
+  const currentCity: CityConfig = getCityById(selectedCityId);
 
   // Route calculation & selection
-  const handleSelectRoute = (from: string, to: string) => {
-    const generated = generateLocalRoute(from, to, selectedCityId);
+  const handleFindRoute = (from: string, to: string) => {
+    const generated = generateLocalRoute(from, to, currentCity.id);
     setCurrentRoute(generated);
     setActiveTab('journey');
   };
@@ -140,6 +153,7 @@ export default function App() {
         from,
         to,
         label: `${from} → ${to}`,
+        cityId: currentCity.id,
       };
       setUserProfile((prev) => ({
         ...prev,
@@ -246,19 +260,30 @@ export default function App() {
     }));
   };
 
-  const handleOpenQuickFare = (routeLabel?: string, mode?: TransportMode) => {
-    if (routeLabel) setQuickFareRouteLabel(routeLabel);
+  const handleOpenQuickFare = (routeLabel?: string, mode?: string) => {
+    const defaultLabel = routeLabel || (currentCity.popularJunctions.length >= 2 ? `${currentCity.popularJunctions[0]} → ${currentCity.popularJunctions[1]}` : `${currentCity.name} Route`);
+    setQuickFareRouteLabel(defaultLabel);
     if (mode) setQuickFareMode(mode);
+    else if (currentCity.availableModes.length > 0) setQuickFareMode(currentCity.availableModes[0]);
     setIsQuickFareModalOpen(true);
   };
 
-  const handleSelectCity = (city: CityConfig) => {
+  const handleSelectCity = (city: CityConfig, country: CountryConfig) => {
+    setSelectedCountryId(country.id);
     setSelectedCityId(city.id);
-    setUserProfile((prev) => ({ ...prev, selectedCity: city.id }));
-    // If current route is from previous city, pick popular route in new city
+    setUserProfile((prev) => ({
+      ...prev,
+      selectedCountryId: country.id,
+      selectedCityId: city.id,
+    }));
+
+    // If city has popular routes, update default active route
     if (city.popularRoutes.length > 0) {
       const defaultRt = city.popularRoutes[0];
       const generated = generateLocalRoute(defaultRt.from, defaultRt.to, city.id);
+      setCurrentRoute(generated);
+    } else if (city.popularJunctions.length >= 2) {
+      const generated = generateLocalRoute(city.popularJunctions[0], city.popularJunctions[1], city.id);
       setCurrentRoute(generated);
     }
   };
@@ -284,14 +309,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F5F5F5] text-[#1A1A1A] font-sans antialiased flex justify-center items-center selection:bg-[#FF6321] selection:text-white p-0 sm:p-4">
-      {/* Android Device Container Wrapper (High Density Frame: 400px - 448px, rounded container) */}
+      {/* Android Device Container Wrapper */}
       <div className="w-full max-w-md bg-white min-h-screen sm:min-h-[720px] sm:h-[840px] sm:max-h-[92vh] flex flex-col relative shadow-2xl border-x border-gray-100 sm:rounded-[32px] sm:border-8 sm:border-[#1A1A1A] overflow-hidden">
-        {/* Device Top Speaker Notch (simulated hardware notch on desktop) */}
+        {/* Device Top Speaker Notch */}
         <div className="hidden sm:block h-5 w-28 bg-[#1A1A1A] absolute top-0 left-1/2 -translate-x-1/2 rounded-b-2xl z-30 pointer-events-none" />
 
         {/* Sticky Header */}
         <Header
           currentCity={currentCity}
+          currentCountry={currentCountry}
           onOpenCitySelector={() => setIsCitySelectorOpen(true)}
           isOffline={isOffline}
           isDataSaver={userProfile.dataSaverMode}
@@ -323,12 +349,13 @@ export default function App() {
           {activeTab === 'home' && (
             <HomeScreen
               currentCity={currentCity}
-              savedRoutes={userProfile.savedRoutes}
-              onSelectRoute={handleSelectRoute}
+              currentCountry={currentCountry}
+              onFindRoute={handleFindRoute}
+              onOpenQuickFareReport={() => handleOpenQuickFare()}
               onOpenReportModal={() => setIsReportModalOpen(true)}
-              onOpenQuickFareModal={() => handleOpenQuickFare()}
-              communityAlerts={communityPosts}
-              onViewAlert={() => setActiveTab('community')}
+              recentPosts={communityPosts}
+              savedRoutes={userProfile.savedRoutes}
+              isDataSaver={userProfile.dataSaverMode}
             />
           )}
 
@@ -336,7 +363,7 @@ export default function App() {
             <JourneyScreen
               route={currentRoute}
               onBackToHome={() => setActiveTab('home')}
-              onChangeRoute={handleSelectRoute}
+              onChangeRoute={handleFindRoute}
               onOpenQuickFareReport={handleOpenQuickFare}
               onTriggerSOS={() => setIsSOSModalOpen(true)}
               onSaveRoute={handleSaveRoute}
@@ -352,14 +379,17 @@ export default function App() {
               onConfirmPost={handleConfirmPost}
               onAddComment={handleAddComment}
               selectedCityName={currentCity.name}
+              currentCountry={currentCountry}
             />
           )}
 
           {activeTab === 'profile' && (
             <ProfileScreen
               userProfile={userProfile}
+              currentCountry={currentCountry}
+              currentCity={currentCity}
               onUpdateUserProfile={(updated) => setUserProfile((prev) => ({ ...prev, ...updated }))}
-              onSelectSavedRoute={handleSelectRoute}
+              onSelectSavedRoute={handleFindRoute}
               onDeleteSavedRoute={handleDeleteSavedRoute}
               onOpenOnboarding={() => setIsOnboardingOpen(true)}
               onOpenCitySelector={() => setIsCitySelectorOpen(true)}
@@ -377,7 +407,7 @@ export default function App() {
           hasActiveJourney={activeTab === 'journey'}
         />
 
-        {/* Device Bottom Home Bar Indicator (desktop device frame) */}
+        {/* Device Bottom Home Bar Indicator */}
         <div className="hidden sm:block absolute bottom-1.5 left-1/2 -translate-x-1/2 w-28 h-1 bg-gray-300 rounded-full z-50 pointer-events-none" />
 
         {/* Modals & Flows */}
@@ -386,7 +416,8 @@ export default function App() {
           onClose={() => setIsReportModalOpen(false)}
           onSubmitReport={handleSubmitReport}
           defaultLocation={currentRoute ? `${currentRoute.from} → ${currentRoute.to}` : ''}
-          cityName={currentCity.name}
+          currentCity={currentCity}
+          currentCountry={currentCountry}
         />
 
         <QuickFareModal
@@ -395,7 +426,8 @@ export default function App() {
           onSubmitFare={handleSubmitReport}
           defaultRoute={quickFareRouteLabel}
           defaultMode={quickFareMode}
-          cityName={currentCity.name}
+          currentCountry={currentCountry}
+          currentCity={currentCity}
         />
 
         <SOSModal
@@ -403,14 +435,14 @@ export default function App() {
           onClose={() => setIsSOSModalOpen(false)}
           emergencyContacts={userProfile.emergencyContacts}
           currentCity={currentCity}
-          currentRouteLabel={currentRoute ? `${currentRoute.from} → ${currentRoute.to}` : 'Transit Journey'}
+          currentRouteLabel={currentRoute ? `${currentRoute.from} → ${currentRoute.to}` : `${currentCity.name} Transit`}
         />
 
         <CitySelectorModal
           isOpen={isCitySelectorOpen}
           onClose={() => setIsCitySelectorOpen(false)}
-          cities={NIGERIAN_CITIES}
           selectedCityId={selectedCityId}
+          selectedCountryId={selectedCountryId}
           onSelectCity={handleSelectCity}
         />
 

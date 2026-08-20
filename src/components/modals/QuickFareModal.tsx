@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { X, Check, Banknote } from 'lucide-react';
-import { TransportMode, CommunityPost } from '../../types';
+import { CommunityPost, CountryConfig, CityConfig } from '../../types';
 
 interface QuickFareModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmitFare: (report: Omit<CommunityPost, 'id' | 'timestamp' | 'stars' | 'confirms' | 'comments'>) => void;
   defaultRoute?: string;
-  defaultMode?: TransportMode;
-  cityName: string;
+  defaultMode?: string;
+  currentCountry: CountryConfig;
+  currentCity: CityConfig;
 }
 
 export const QuickFareModal: React.FC<QuickFareModalProps> = ({
@@ -16,15 +17,19 @@ export const QuickFareModal: React.FC<QuickFareModalProps> = ({
   onClose,
   onSubmitFare,
   defaultRoute = 'Ojota → Yaba',
-  defaultMode = 'Danfo',
-  cityName,
+  defaultMode,
+  currentCountry,
+  currentCity,
 }) => {
-  const [fare, setFare] = useState('900');
+  const availableModes = currentCity.availableModes.length > 0 ? currentCity.availableModes : ['Bus', 'Taxi', 'Walk'];
+  const [fare, setFare] = useState('500');
   const [route, setRoute] = useState(defaultRoute);
-  const [mode, setMode] = useState<TransportMode>(defaultMode);
+  const [mode, setMode] = useState<string>(defaultMode || availableModes[0] || 'Bus');
   const [submitted, setSubmitted] = useState(false);
 
   if (!isOpen) return null;
+
+  const currencySymbol = currentCountry.currencySymbol;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,11 +37,13 @@ export const QuickFareModal: React.FC<QuickFareModalProps> = ({
 
     onSubmitFare({
       category: 'Fare',
-      city: cityName,
+      countryId: currentCountry.id,
+      city: currentCity.name,
       locationOrRoute: route.trim(),
       fareAmount: Number(fare),
+      currencySymbol,
       transportMode: mode,
-      text: `Paid ₦${Number(fare).toLocaleString()} via ${mode} on this route.`,
+      text: `Paid ${currencySymbol}${Number(fare).toLocaleString()} via ${mode} in ${currentCity.name}.`,
       timeAgo: 'Just now',
     });
 
@@ -47,17 +54,15 @@ export const QuickFareModal: React.FC<QuickFareModalProps> = ({
     }, 1200);
   };
 
-  const transportModes: TransportMode[] = ['Danfo', 'Keke', 'BRT', 'Along', 'Micra', 'Taxi'];
-
   return (
     <div className="fixed inset-0 z-50 bg-[#1A1A1A]/70 backdrop-blur-xs flex items-center justify-center p-3">
       <div className="bg-white w-full max-w-xs rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         <div className="p-3.5 bg-white border-b border-gray-100 flex items-center justify-between">
           <div className="font-black text-xs text-[#1A1A1A] uppercase tracking-wider flex items-center gap-1.5">
             <Banknote className="w-4 h-4 text-green-600" />
-            <span>Quick Fare Report</span>
+            <span>Quick Fare Report ({currentCity.name})</span>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-900 cursor-pointer">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-900 cursor-pointer p-1 rounded-lg">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -69,22 +74,22 @@ export const QuickFareModal: React.FC<QuickFareModalProps> = ({
             </div>
             <div className="text-sm font-black text-[#1A1A1A]">✓ Fare Submitted!</div>
             <p className="text-xs text-gray-500 font-medium">
-              Your fare report keeps RouteWise accurate for fellow commuters.
+              Your fare report keeps RouteWise accurate for commuters in {currentCity.name}.
             </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-4 space-y-3">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-1">
-                You Paid (₦):
+                You Paid ({currencySymbol}):
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-sm font-black text-gray-400">₦</span>
+                <span className="absolute left-3 top-2 text-sm font-black text-gray-400">{currencySymbol}</span>
                 <input
                   type="number"
                   value={fare}
                   onChange={(e) => setFare(e.target.value)}
-                  placeholder="900"
+                  placeholder="500"
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-base font-black text-[#1A1A1A] focus:outline-none focus:border-[#FF6321]"
                   autoFocus
                   required
@@ -97,7 +102,7 @@ export const QuickFareModal: React.FC<QuickFareModalProps> = ({
                 Transport:
               </label>
               <div className="flex flex-wrap gap-1">
-                {transportModes.map((m) => (
+                {availableModes.map((m) => (
                   <button
                     type="button"
                     key={m}

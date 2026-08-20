@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { X, Check, Banknote, AlertTriangle, ShieldAlert, Bus, Navigation, HelpCircle } from 'lucide-react';
-import { ReportCategory, TransportMode, CommunityPost } from '../../types';
+import { X, Check } from 'lucide-react';
+import { ReportCategory, CommunityPost, CityConfig, CountryConfig } from '../../types';
 
 interface ReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmitReport: (report: Omit<CommunityPost, 'id' | 'timestamp' | 'stars' | 'confirms' | 'comments'>) => void;
   defaultLocation?: string;
-  cityName: string;
+  currentCity: CityConfig;
+  currentCountry: CountryConfig;
 }
 
 export const ReportModal: React.FC<ReportModalProps> = ({
@@ -15,17 +16,21 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   onClose,
   onSubmitReport,
   defaultLocation = '',
-  cityName,
+  currentCity,
+  currentCountry,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<ReportCategory | null>(null);
-  const [location, setLocation] = useState(defaultLocation || 'Ojota → Yaba');
+  const defaultLoc = defaultLocation || (currentCity.popularJunctions.length >= 2 ? `${currentCity.popularJunctions[0]} → ${currentCity.popularJunctions[1]}` : currentCity.name);
+  const [location, setLocation] = useState(defaultLoc);
   const [fareAmount, setFareAmount] = useState('');
-  const [transportMode, setTransportMode] = useState<TransportMode>('Danfo');
+  const [transportMode, setTransportMode] = useState<string>(currentCity.availableModes[0] || 'Bus');
   const [description, setDescription] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
 
   if (!isOpen) return null;
+
+  const currencySymbol = currentCountry.currencySymbol;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,9 +38,11 @@ export const ReportModal: React.FC<ReportModalProps> = ({
 
     onSubmitReport({
       category: selectedCategory,
-      city: cityName,
+      countryId: currentCountry.id,
+      city: currentCity.name,
       locationOrRoute: location.trim(),
       fareAmount: fareAmount ? Number(fareAmount) : undefined,
+      currencySymbol: fareAmount ? currencySymbol : undefined,
       transportMode: selectedCategory === 'Fare' || selectedCategory === 'Transport' ? transportMode : undefined,
       text: description.trim() || `${selectedCategory} update at ${location}`,
       timeAgo: 'Just now',
@@ -55,12 +62,12 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   const categories: { id: ReportCategory; label: string; icon: string; desc: string }[] = [
     { id: 'Fare', label: 'Fare', icon: '💰', desc: 'Price paid or hike' },
     { id: 'Traffic', label: 'Traffic', icon: '🚦', desc: 'Gridlock, standstill' },
-    { id: 'Transport', label: 'Transport', icon: '🚌', desc: 'Queue & bus availability' },
+    { id: 'Transport', label: 'Transport', icon: '🚌', desc: 'Queue & vehicle availability' },
     { id: 'Safety', label: 'Safety', icon: '⚠️', desc: 'Incident, calm or caution' },
     { id: 'Road', label: 'Road', icon: '🛣️', desc: 'Pothole, blockage' },
   ];
 
-  const transportModes: TransportMode[] = ['Danfo', 'Keke', 'BRT', 'Along', 'Micra', 'Okada', 'Taxi'];
+  const availableModes = currentCity.availableModes.length > 0 ? currentCity.availableModes : ['Bus', 'Taxi', 'Walk'];
 
   return (
     <div className="fixed inset-0 z-50 bg-[#1A1A1A]/70 backdrop-blur-xs flex items-center justify-center p-3">
@@ -68,7 +75,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
         {/* Header */}
         <div className="p-4 bg-white border-b border-gray-100 flex items-center justify-between">
           <div className="font-black text-sm tracking-tight text-[#1A1A1A] uppercase flex items-center gap-1.5">
-            <span>📢 Quick Commuter Report</span>
+            <span>📢 Quick Commuter Report ({currentCity.name})</span>
           </div>
           <button
             onClick={onClose}
@@ -87,7 +94,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
               ✓ Report Received!
             </div>
             <p className="text-xs text-gray-500 font-medium">
-              Your live intel is helping fellow commuters right now.
+              Your live intel is helping fellow commuters in {currentCity.name} right now.
             </p>
           </div>
         ) : (
@@ -132,13 +139,13 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                 {/* Location / Junction */}
                 <div>
                   <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-1">
-                    Where? (Junction or Route)
+                    Where in {currentCity.name}? (Junction or Route)
                   </label>
                   <input
                     type="text"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    placeholder="e.g. Oshodi, Ojota → Yaba"
+                    placeholder={`e.g. ${currentCity.popularJunctions[0] || 'Central Area'}`}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-[#1A1A1A] focus:outline-none focus:border-[#FF6321]"
                     required
                   />
@@ -149,16 +156,16 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                   <div className="space-y-2">
                     <div>
                       <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-1">
-                        Fare Paid (₦)
+                        Fare Paid ({currencySymbol})
                       </label>
                       <div className="relative">
-                        <span className="absolute left-3 top-2 text-xs font-bold text-gray-400">₦</span>
+                        <span className="absolute left-3 top-2 text-xs font-bold text-gray-400">{currencySymbol}</span>
                         <input
                           type="number"
                           value={fareAmount}
                           onChange={(e) => setFareAmount(e.target.value)}
-                          placeholder="800"
-                          className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-7 pr-3 py-2 text-xs text-[#1A1A1A] font-black focus:outline-none focus:border-[#FF6321]"
+                          placeholder="500"
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs text-[#1A1A1A] font-black focus:outline-none focus:border-[#FF6321]"
                           required
                         />
                       </div>
@@ -169,7 +176,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                         Transport Mode
                       </label>
                       <div className="flex flex-wrap gap-1.5">
-                        {transportModes.map((mode) => (
+                        {availableModes.map((mode) => (
                           <button
                             type="button"
                             key={mode}
@@ -201,7 +208,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                       selectedCategory === 'Traffic'
                         ? 'e.g. Heavy traffic moving slowly towards bridge...'
                         : selectedCategory === 'Safety'
-                        ? 'e.g. Area is well-lit, police checkpoint active...'
+                        ? 'e.g. Area is well-lit, security checkpoint active...'
                         : 'Any useful tip for other commuters...'
                     }
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-medium focus:outline-none focus:border-[#FF6321]"

@@ -1,6 +1,6 @@
 {
   "name": "RouteWise",
-  "description": "Lightweight Android-first transportation intelligence app for Nigerian commuters to find routes, expected fares, live road alerts, and community reports.",
+  "description": "Lightweight Android-first transit intelligence app for commuters across Nigeria and Africa to find routes, calculate expected fares, receive live road alerts, and share real-time community transit intel.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

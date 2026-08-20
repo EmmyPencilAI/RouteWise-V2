@@ -18,14 +18,14 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     {
       stepNumber: 1,
       title: 'Know your route.',
-      desc: 'Step-by-step local Nigerian transit guide: Keke, Danfo, BRT, Along, and where to board opposite landmarks.',
+      desc: 'Step-by-step local transit guide across Nigerian and African cities: Keke, Danfo, Along, BRT, Micra, Tro Tro, and where to board opposite landmarks.',
       icon: Compass,
       color: 'text-orange-500 bg-orange-100',
     },
     {
       stepNumber: 2,
       title: 'Know your fare.',
-      desc: 'Expected fare ranges powered by real everyday commuter submissions. Never get overcharged by conductors.',
+      desc: 'Expected fare ranges powered by real everyday commuter submissions. Never get overcharged by conductors or surge pricing.',
       icon: Banknote,
       color: 'text-emerald-600 bg-emerald-100',
     },

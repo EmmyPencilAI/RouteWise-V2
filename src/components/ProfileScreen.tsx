@@ -17,12 +17,15 @@ import {
   RefreshCw,
   MapPin,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Globe
 } from 'lucide-react';
-import { UserProfile, EmergencyContact } from '../types';
+import { UserProfile, EmergencyContact, CountryConfig, CityConfig } from '../types';
 
 interface ProfileScreenProps {
   userProfile: UserProfile;
+  currentCountry: CountryConfig;
+  currentCity: CityConfig;
   onUpdateUserProfile: (updated: Partial<UserProfile>) => void;
   onSelectSavedRoute: (from: string, to: string) => void;
   onDeleteSavedRoute: (id: string) => void;
@@ -34,6 +37,8 @@ interface ProfileScreenProps {
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   userProfile,
+  currentCountry,
+  currentCity,
   onUpdateUserProfile,
   onSelectSavedRoute,
   onDeleteSavedRoute,
@@ -47,6 +52,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [newContactPhone, setNewContactPhone] = useState('');
   const [newContactRel, setNewContactRel] = useState('Family');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced'>('idle');
+
+  const currencySymbol = currentCountry.currencySymbol;
 
   const handleAddEmergencyContact = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,8 +110,25 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </div>
         </div>
 
+        {/* Active Transit Zone Badge with switch button */}
+        <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">{currentCountry.flag}</span>
+            <div>
+              <div className="text-xs font-bold text-gray-900">{currentCity.name}, {currentCity.state}</div>
+              <div className="text-[10px] text-gray-400 font-medium">{currentCountry.name} • Currency: {currentCountry.currency} ({currentCountry.currencySymbol})</div>
+            </div>
+          </div>
+          <button
+            onClick={onOpenCitySelector}
+            className="px-2.5 py-1 bg-white border border-gray-200 hover:border-[#FF6321] rounded-lg text-xs font-bold text-[#FF6321] cursor-pointer"
+          >
+            Switch
+          </button>
+        </div>
+
         {/* Contribution stats */}
-        <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-gray-100">
+        <div className="grid grid-cols-2 gap-2.5 pt-1">
           <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-200 text-center">
             <div className="text-base font-black text-amber-500 flex items-center justify-center gap-1">
               <Star className="w-4 h-4 fill-amber-400" />
@@ -163,7 +187,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </div>
 
         <p className="text-[11px] text-gray-500 font-medium">
-          When you press SOS, RouteWise generates instant WhatsApp / SMS dispatch links for these numbers with your route and live location.
+          When you trigger SOS, RouteWise generates instant WhatsApp & SMS dispatch links with your live journey details and location.
         </p>
 
         {showAddContact && (
@@ -174,7 +198,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 type="text"
                 value={newContactName}
                 onChange={(e) => setNewContactName(e.target.value)}
-                placeholder="Name (e.g. Mum, Emeka)"
+                placeholder="Name (e.g. Mum, Brother)"
                 className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:border-[#FF6321]"
                 required
               />
@@ -182,7 +206,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 type="tel"
                 value={newContactPhone}
                 onChange={(e) => setNewContactPhone(e.target.value)}
-                placeholder="Phone (080...)"
+                placeholder="Phone number"
                 className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:border-[#FF6321]"
                 required
               />
@@ -203,13 +227,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAddContact(false)}
-                  className="px-2.5 py-1 text-gray-500 text-xs font-bold"
+                  className="px-2.5 py-1 text-gray-500 text-xs font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1 bg-[#1A1A1A] text-white rounded-lg text-xs font-bold"
+                  className="px-3 py-1 bg-[#1A1A1A] text-white rounded-lg text-xs font-bold cursor-pointer"
                 >
                   Save Contact
                 </button>
@@ -301,7 +325,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <div>
               <div className="text-xs font-bold text-gray-900">Low-Data Saver Mode</div>
               <div className="text-[10px] text-gray-400 font-medium">
-                Minimizes background network, text-first loading
+                Optimized for slow internet & low-RAM Android phones
               </div>
             </div>
           </div>
@@ -327,7 +351,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               {isOffline ? <WifiOff className="w-4 h-4 text-amber-600" /> : <Wifi className="w-4 h-4 text-gray-600" />}
             </div>
             <div>
-              <div className="text-xs font-bold text-gray-900">Network Simulation</div>
+              <div className="text-xs font-bold text-gray-900">Network Simulator</div>
               <div className="text-[10px] text-gray-400 font-medium">
                 Status: {isOffline ? 'Offline (Using cached routes)' : 'Online (Live sync)'}
               </div>
@@ -366,7 +390,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         >
           <div className="flex items-center gap-2.5">
             <MapPin className="w-4 h-4 text-[#FF6321]" />
-            <span className="text-xs font-bold text-gray-800">Switch City</span>
+            <span className="text-xs font-bold text-gray-800">Switch Country / City</span>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-400" />
         </button>

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { 
   ArrowLeft, 
-  ArrowRight, 
   Clock, 
   Banknote, 
   AlertTriangle, 
@@ -22,23 +21,31 @@ interface JourneyScreenProps {
   route: RouteOption | null;
   onBackToHome: () => void;
   onChangeRoute: (from: string, to: string) => void;
-  onOpenQuickFareReport: (routeLabel: string, currentMode?: TransportMode) => void;
+  onOpenQuickFareReport: (routeLabel: string, currentMode?: string) => void;
   onTriggerSOS: () => void;
   onSaveRoute: (from: string, to: string) => void;
   isSaved?: boolean;
 }
 
-const MODE_BADGE_STYLE: Record<TransportMode, { bg: string; text: string; icon: string }> = {
-  Danfo: { bg: 'bg-amber-100 border-amber-300', text: 'text-amber-900', icon: '🚐' },
-  Keke: { bg: 'bg-emerald-100 border-emerald-300', text: 'text-emerald-900', icon: '🛺' },
-  BRT: { bg: 'bg-blue-100 border-blue-300', text: 'text-blue-900', icon: '🚌' },
-  Okada: { bg: 'bg-purple-100 border-purple-300', text: 'text-purple-900', icon: '🏍️' },
-  Taxi: { bg: 'bg-yellow-100 border-yellow-300', text: 'text-yellow-900', icon: '🚕' },
-  Along: { bg: 'bg-teal-100 border-teal-300', text: 'text-teal-900', icon: '🚗' },
-  Micra: { bg: 'bg-orange-100 border-orange-300', text: 'text-orange-900', icon: '🚘' },
-  Coaster: { bg: 'bg-indigo-100 border-indigo-300', text: 'text-indigo-900', icon: '🚍' },
-  Ferry: { bg: 'bg-cyan-100 border-cyan-300', text: 'text-cyan-900', icon: '⛴️' },
-  Walk: { bg: 'bg-stone-100 border-stone-300', text: 'text-stone-800', icon: '🚶' },
+const MODE_ICON_MAP: Record<string, string> = {
+  Danfo: '🚐',
+  Keke: '🛺',
+  BRT: '🚌',
+  Okada: '🏍️',
+  Taxi: '🚕',
+  Along: '🚗',
+  Micra: '🚘',
+  Coaster: '🚍',
+  Ferry: '⛴️',
+  'A Daidaita Sahu': '🛺',
+  'Tro Tro': '🚐',
+  'Shared Taxi': '🚗',
+  Matatu: '🚐',
+  'Boda Boda': '🏍️',
+  'Tuk Tuk': '🛺',
+  'Coaster Bus': '🚍',
+  Moto: '🏍️',
+  Walk: '🚶',
 };
 
 export const JourneyScreen: React.FC<JourneyScreenProps> = ({
@@ -59,20 +66,22 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
 
   if (!route) {
     return (
-      <div className="bg-white rounded-2xl p-6 border border-stone-200 text-center space-y-3">
-        <h2 className="text-base font-bold text-stone-800">No Journey Selected</h2>
-        <p className="text-xs text-stone-500">
+      <div className="bg-white rounded-2xl p-6 border border-gray-200 text-center space-y-3">
+        <h2 className="text-base font-bold text-[#1A1A1A]">No Journey Selected</h2>
+        <p className="text-xs text-gray-500">
           Enter your destination from the Home screen to view the recommended local route.
         </p>
         <button
           onClick={onBackToHome}
-          className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl"
+          className="px-4 py-2 bg-[#FF6321] hover:bg-[#e05417] text-white text-xs font-bold rounded-xl cursor-pointer"
         >
           Go to Search
         </button>
       </div>
     );
   }
+
+  const currencySymbol = route.currencySymbol || '₦';
 
   const handleStartJourney = () => {
     setIsLiveTravelling(true);
@@ -104,7 +113,7 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
   };
 
   const handleShareJourney = () => {
-    const shareText = `RouteWise Journey: ${route.from} → ${route.to}\nExpected Fare: ₦${route.fareMin.toLocaleString()} - ₦${route.fareMax.toLocaleString()}\nEst. Time: ${route.totalMinutesMin}-${route.totalMinutesMax} mins\nTransfers: ${route.transfersCount}`;
+    const shareText = `RouteWise Journey: ${route.from} → ${route.to}\nExpected Fare: ${currencySymbol}${route.fareMin.toLocaleString()} - ${currencySymbol}${route.fareMax.toLocaleString()}\nEst. Time: ${route.totalMinutesMin}-${route.totalMinutesMax} mins\nTransfers: ${route.transfersCount}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(shareText);
       setCopiedShare(true);
@@ -212,7 +221,7 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
                   <span>{route.from}</span>
                   <button
                     onClick={() => setShowEditInputs(true)}
-                    className="text-gray-400 hover:text-gray-600 p-0.5"
+                    className="text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
                     title="Edit route"
                   >
                     <Edit3 className="w-3 h-3" />
@@ -226,7 +235,7 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
           </div>
         </div>
 
-        {/* Route Metrics Row: Recommended Route + Expected Fare */}
+        {/* Route Metrics Row */}
         <div className="flex justify-between items-end pt-3 border-t border-gray-100">
           <div className="flex flex-col">
             <span className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-0.5">
@@ -250,7 +259,7 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
               Expected Fare
             </span>
             <span className="text-xl font-black text-[#FF6321] block tracking-tight">
-              ₦{route.fareMin.toLocaleString()}–₦{route.fareMax.toLocaleString()}
+              {currencySymbol}{route.fareMin.toLocaleString()}–{currencySymbol}{route.fareMax.toLocaleString()}
             </span>
             <div className="flex items-center justify-end gap-1 mt-0.5">
               <span className="text-[10px] text-green-600 font-bold">
@@ -270,7 +279,7 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
             </span>
             <button
               onClick={handleStopJourney}
-              className="text-xs text-orange-100 hover:text-white flex items-center gap-1 font-bold underline"
+              className="text-xs text-orange-100 hover:text-white flex items-center gap-1 font-bold underline cursor-pointer"
             >
               <Square className="w-3 h-3" /> Stop
             </button>
@@ -284,7 +293,7 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
             <div className="text-xs text-orange-100 mt-1 flex items-center gap-2">
               <span>Alight: <strong>{currentActiveStep.dropLandmark}</strong></span>
               <span>•</span>
-              <span>₦{currentActiveStep.fareMin}–₦{currentActiveStep.fareMax}</span>
+              <span>{currencySymbol}{currentActiveStep.fareMin}–{currencySymbol}{currentActiveStep.fareMax}</span>
             </div>
           </div>
 
@@ -310,7 +319,7 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
         </section>
       )}
 
-      {/* STEP-BY-STEP TRANSIT TIMELINE (High Density Dashed Connector Pattern) */}
+      {/* STEP-BY-STEP TRANSIT TIMELINE */}
       <section className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs space-y-4">
         <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
           <span className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
@@ -320,13 +329,13 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
             onClick={() => onOpenQuickFareReport(`${route.from} → ${route.to}`, route.steps[0]?.mode)}
             className="text-[10px] text-[#FF6321] hover:underline font-bold uppercase tracking-wider cursor-pointer"
           >
-            I paid ₦____
+            I paid {currencySymbol}____
           </button>
         </div>
 
         <div className="space-y-0">
           {route.steps.map((step, index) => {
-            const badge = MODE_BADGE_STYLE[step.mode] || MODE_BADGE_STYLE['Danfo'];
+            const icon = MODE_ICON_MAP[step.mode] || '🚐';
             const isStepActive = isLiveTravelling && activeStepIndex === index;
             const isLastStep = index === route.steps.length - 1;
 
@@ -353,11 +362,11 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-gray-900 text-sm">
-                        {badge.icon} {step.mode}
+                        {icon} {step.mode}
                       </span>
                     </div>
                     <span className="text-xs text-gray-500 font-bold">
-                      ₦{step.fareMin}–₦{step.fareMax}
+                      {currencySymbol}{step.fareMin}–{currencySymbol}{step.fareMax}
                     </span>
                   </div>
 
@@ -385,7 +394,7 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
           })}
         </div>
 
-        {/* High Density Route Alert (if applicable or clear status) */}
+        {/* Route Alert */}
         {route.routeAlert ? (
           <div className="mt-4 p-4 bg-orange-50 border border-orange-100 rounded-xl flex items-start gap-3">
             <div className="w-5 h-5 mt-0.5 text-[#FF6321] shrink-0">
@@ -406,12 +415,12 @@ export const JourneyScreen: React.FC<JourneyScreenProps> = ({
         ) : (
           <div className="mt-3 p-3 bg-green-50/70 border border-green-100 rounded-xl flex items-center gap-2 text-xs text-green-800">
             <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-            <span className="font-medium">No major road disruptions reported on this route.</span>
+            <span className="font-medium">No major disruptions reported on this route.</span>
           </div>
         )}
       </section>
 
-      {/* START JOURNEY PRIMARY ACTION (High Density Theme Big Action Button) */}
+      {/* START JOURNEY PRIMARY ACTION */}
       {!isLiveTravelling && (
         <div className="pt-1">
           <button

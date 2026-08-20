@@ -1,9 +1,10 @@
 import React from 'react';
-import { ShieldAlert, Wifi, WifiOff, Zap, MapPin } from 'lucide-react';
-import { CityConfig } from '../types';
+import { ShieldAlert, WifiOff, Zap, MapPin } from 'lucide-react';
+import { CityConfig, CountryConfig } from '../types';
 
 interface HeaderProps {
   currentCity: CityConfig;
+  currentCountry: CountryConfig;
   onOpenCitySelector: () => void;
   isOffline: boolean;
   isDataSaver: boolean;
@@ -14,6 +15,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   currentCity,
+  currentCountry,
   onOpenCitySelector,
   isOffline,
   isDataSaver,
@@ -34,10 +36,10 @@ export const Header: React.FC<HeaderProps> = ({
               id="city-selector-btn"
               onClick={onOpenCitySelector}
               className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-50 hover:bg-gray-100 text-[#1A1A1A] text-xs font-bold rounded-full border border-gray-200 transition-colors cursor-pointer"
-              title="Change city"
+              title="Change country or city"
             >
-              <MapPin className="w-3 h-3 text-[#FF6321]" />
-              <span>{currentCity.name}</span>
+              <span className="text-xs">{currentCountry.flag}</span>
+              <span className="truncate max-w-[110px]">{currentCity.name}</span>
             </button>
           </div>
           {isOffline ? (
@@ -46,7 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           ) : (
             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-              Transit Intel • Nigeria
+              Transit Intel • {currentCountry.name}
             </span>
           )}
         </div>
@@ -69,7 +71,7 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-[10px] uppercase font-bold hidden sm:inline">{isDataSaver ? 'Low-Data' : 'Data Saver'}</span>
         </button>
 
-        {/* SOS Button (High Density Design Theme Pill) */}
+        {/* SOS Button */}
         <button
           id="sos-header-btn"
           onClick={onTriggerSOS}

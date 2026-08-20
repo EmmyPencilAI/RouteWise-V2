@@ -6,14 +6,11 @@ import {
   MessageSquare, 
   Clock, 
   Send, 
-  AlertTriangle,
-  Banknote,
-  Navigation,
-  Shield,
-  Bus,
-  Filter
+  Filter,
+  MapPin,
+  Globe
 } from 'lucide-react';
-import { CommunityPost, ReportCategory, TransportMode } from '../types';
+import { CommunityPost, ReportCategory, CountryConfig } from '../types';
 
 interface CommunityScreenProps {
   posts: CommunityPost[];
@@ -22,6 +19,7 @@ interface CommunityScreenProps {
   onConfirmPost: (postId: string) => void;
   onAddComment: (postId: string, text: string) => void;
   selectedCityName: string;
+  currentCountry: CountryConfig;
 }
 
 export const CommunityScreen: React.FC<CommunityScreenProps> = ({
@@ -31,8 +29,10 @@ export const CommunityScreen: React.FC<CommunityScreenProps> = ({
   onConfirmPost,
   onAddComment,
   selectedCityName,
+  currentCountry,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [filterScope, setFilterScope] = useState<'city' | 'all'>('city');
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [commentInput, setCommentInput] = useState('');
 
@@ -46,6 +46,13 @@ export const CommunityScreen: React.FC<CommunityScreenProps> = ({
   ];
 
   const filteredPosts = posts.filter((post) => {
+    // City filter check
+    if (filterScope === 'city') {
+      const matchCity = post.city.toLowerCase() === selectedCityName.toLowerCase() ||
+        post.city.toLowerCase().includes(selectedCityName.toLowerCase());
+      if (!matchCity) return false;
+    }
+    // Category filter check
     if (selectedCategory === 'All') return true;
     return post.category === selectedCategory;
   });
@@ -58,28 +65,52 @@ export const CommunityScreen: React.FC<CommunityScreenProps> = ({
 
   return (
     <div className="space-y-3.5 pb-20 relative">
-      {/* Top Header & Category Tabs */}
+      {/* Top Header & Filters */}
       <section className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-base font-black text-[#1A1A1A] tracking-tight uppercase">
               Community Intel
             </h1>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-              Live updates in {selectedCityName}
-            </p>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                {filterScope === 'city' ? `In ${selectedCityName}` : `Across ${currentCountry.name}`}
+              </span>
+            </div>
           </div>
 
-          <button
-            onClick={onOpenReportModal}
-            className="px-3.5 py-2 bg-[#FF6321] hover:bg-[#e05417] active:scale-95 text-white text-xs font-black rounded-xl flex items-center gap-1 shadow-sm uppercase tracking-wider cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Report</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            {/* Scope toggle: City vs All */}
+            <div className="flex bg-gray-100 p-0.5 rounded-xl border border-gray-200 text-[10px] font-bold">
+              <button
+                onClick={() => setFilterScope('city')}
+                className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+                  filterScope === 'city' ? 'bg-white text-[#1A1A1A] shadow-xs' : 'text-gray-500'
+                }`}
+              >
+                {selectedCityName}
+              </button>
+              <button
+                onClick={() => setFilterScope('all')}
+                className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+                  filterScope === 'all' ? 'bg-white text-[#1A1A1A] shadow-xs' : 'text-gray-500'
+                }`}
+              >
+                All
+              </button>
+            </div>
+
+            <button
+              onClick={onOpenReportModal}
+              className="px-3 py-1.5 bg-[#FF6321] hover:bg-[#e05417] active:scale-95 text-white text-xs font-black rounded-xl flex items-center gap-1 shadow-sm uppercase tracking-wider cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Report</span>
+            </button>
+          </div>
         </div>
 
-        {/* Category Filter Pills (horizontal scrollable) */}
+        {/* Category Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {categories.map((cat) => {
             const isSelected = selectedCategory === cat.value;
@@ -106,13 +137,14 @@ export const CommunityScreen: React.FC<CommunityScreenProps> = ({
         {filteredPosts.length > 0 ? (
           filteredPosts.map((post) => {
             const isCommentOpen = activeCommentPostId === post.id;
+            const currencySymbol = post.currencySymbol || currentCountry.currencySymbol || '₦';
 
             return (
               <div
                 key={post.id}
                 className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs space-y-2.5"
               >
-                {/* Header: Category Badge + Location + Time */}
+                {/* Header: Category Badge + Location + City + Time */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {post.category === 'Fare' && (
@@ -141,6 +173,10 @@ export const CommunityScreen: React.FC<CommunityScreenProps> = ({
                       </span>
                     )}
 
+                    <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[9px] font-bold rounded">
+                      {post.city}
+                    </span>
+
                     <span className="text-xs font-bold text-gray-900 truncate">
                       {post.locationOrRoute}
                     </span>
@@ -156,7 +192,7 @@ export const CommunityScreen: React.FC<CommunityScreenProps> = ({
                 <div>
                   {post.fareAmount && (
                     <div className="text-lg font-black text-[#1A1A1A] mb-0.5">
-                      ₦{post.fareAmount.toLocaleString()}{' '}
+                      {currencySymbol}{post.fareAmount.toLocaleString()}{' '}
                       {post.transportMode && (
                         <span className="text-xs font-semibold text-gray-500">
                           ({post.transportMode})
@@ -260,14 +296,14 @@ export const CommunityScreen: React.FC<CommunityScreenProps> = ({
           <div className="bg-white rounded-2xl p-6 border border-gray-100 text-center space-y-2 shadow-xs">
             <Filter className="w-8 h-8 text-gray-300 mx-auto" />
             <div className="text-xs font-bold text-gray-800">
-              No reports in &ldquo;{selectedCategory}&rdquo; yet
+              No reports in &ldquo;{selectedCategory}&rdquo; for {filterScope === 'city' ? selectedCityName : currentCountry.name} yet
             </div>
             <p className="text-[11px] text-gray-500">
-              Be the first to submit a live commuter update for {selectedCityName}.
+              Be the first to submit a live commuter update.
             </p>
             <button
               onClick={onOpenReportModal}
-              className="mt-2 px-3.5 py-2 bg-[#FF6321] text-white text-xs font-bold rounded-xl"
+              className="mt-2 px-3.5 py-2 bg-[#FF6321] text-white text-xs font-bold rounded-xl cursor-pointer"
             >
               + Submit Report
             </button>
@@ -275,7 +311,7 @@ export const CommunityScreen: React.FC<CommunityScreenProps> = ({
         )}
       </div>
 
-      {/* Floating Action Button: [+ REPORT] */}
+      {/* Floating Action Button */}
       <div className="fixed bottom-20 right-4 z-30 max-w-md mx-auto">
         <button
           id="floating-report-btn"

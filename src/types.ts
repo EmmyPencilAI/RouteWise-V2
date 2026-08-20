@@ -1,21 +1,17 @@
-export type TransportMode = 
-  | 'Danfo' 
-  | 'Keke' 
-  | 'BRT' 
-  | 'Okada' 
-  | 'Taxi' 
-  | 'Along' 
-  | 'Micra' 
-  | 'Coaster' 
-  | 'Ferry' 
-  | 'Walk';
+export interface TransportModeConfig {
+  id: string;
+  name: string;
+  localName?: string;
+  icon: string;
+  description?: string;
+}
 
 export type ReportCategory = 'Fare' | 'Traffic' | 'Transport' | 'Safety' | 'Road';
 
 export interface RouteStep {
   id: string;
   stepNumber: number;
-  mode: TransportMode;
+  mode: string;
   from: string;
   to: string;
   boardLandmark: string;
@@ -30,11 +26,14 @@ export interface RouteOption {
   id: string;
   from: string;
   to: string;
+  cityId: string;
+  countryId: string;
   type: 'BALANCED' | 'FASTEST' | 'CHEAPEST';
   totalMinutesMin: number;
   totalMinutesMax: number;
   fareMin: number;
   fareMax: number;
+  currencySymbol: string;
   transfersCount: number;
   walkingDistanceMeters: number;
   confidence: 'High confidence' | 'Estimated';
@@ -60,10 +59,12 @@ export interface Comment {
 export interface CommunityPost {
   id: string;
   category: ReportCategory;
+  countryId: string;
   city: string;
   locationOrRoute: string;
   fareAmount?: number;
-  transportMode?: TransportMode;
+  currencySymbol?: string;
+  transportMode?: string;
   text: string;
   timeAgo: string;
   timestamp: number;
@@ -86,10 +87,25 @@ export interface CityConfig {
   id: string;
   name: string;
   state: string;
+  countryId: string;
   popularJunctions: string[];
   popularRoutes: { from: string; to: string }[];
-  availableModes: TransportMode[];
+  availableModes: string[];
   emergencyNumbers: { label: string; number: string }[];
+  localDialectTip?: string;
+}
+
+export interface CountryConfig {
+  id: string;
+  name: string;
+  code: string;
+  currency: string;
+  currencySymbol: string;
+  flag: string;
+  isPrimaryMarket: boolean;
+  emergencyNumbers: { label: string; number: string }[];
+  cities: CityConfig[];
+  availableModes: TransportModeConfig[];
 }
 
 export interface UserProfile {
@@ -98,9 +114,21 @@ export interface UserProfile {
   usefulContributions: number;
   confirmedReports: number;
   badges: { id: string; title: string; icon: string }[];
-  savedRoutes: { id: string; from: string; to: string; label: string }[];
-  tripHistory: { id: string; from: string; to: string; date: string; farePaid: number; mode: string }[];
+  savedRoutes: { id: string; from: string; to: string; label: string; cityId?: string }[];
+  tripHistory: { 
+    id: string; 
+    from: string; 
+    to: string; 
+    date: string; 
+    farePaid: number; 
+    currencySymbol?: string;
+    mode: string 
+  }[];
   emergencyContacts: EmergencyContact[];
   dataSaverMode: boolean;
-  selectedCity: string;
+  selectedCountryId: string;
+  selectedCityId: string;
 }
+
+// Backward compatibility alias
+export type TransportMode = string;
