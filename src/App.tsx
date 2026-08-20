@@ -12,36 +12,46 @@ import { QuickFareModal } from './components/modals/QuickFareModal';
 import { SOSModal } from './components/modals/SOSModal';
 import { CitySelectorModal } from './components/modals/CitySelectorModal';
 import { OnboardingModal } from './components/modals/OnboardingModal';
+import { AuthPhoneModal } from './components/modals/AuthPhoneModal';
+import { AdminDispatchModal } from './components/modals/AdminDispatchModal';
 
-// Data & Types
+// Data, Services & Types
 import { COUNTRIES_DATA, getCityById, getCountryById } from './data/cities';
-import { generateLocalRoute } from './data/defaultRoutes';
+import { generateLocalRoute, generateLocalRouteAsync } from './data/defaultRoutes';
 import { INITIAL_COMMUNITY_POSTS } from './data/communityData';
+import { fareIntelligenceService } from './services/fare/fareIntelligenceService';
 import { 
   CityConfig, 
   CountryConfig,
   RouteOption, 
   CommunityPost, 
-  UserProfile 
+  UserProfile,
+  ReportStatus
 } from './types';
 
 const INITIAL_PROFILE: UserProfile = {
+  id: 'usr_commuter_77',
+  phoneNumber: '08031234567',
+  isPhoneVerified: false,
   name: 'Emeka Adeleke',
-  levelTitle: 'Transit Insider',
+  levelTitle: 'Route Scout',
   usefulContributions: 240,
   confirmedReports: 31,
+  starsReceived: 18,
   badges: [
-    { id: 'b1', title: 'Route Scout', icon: '🧭' },
-    { id: 'b2', title: 'Fare Watcher', icon: '💰' },
-    { id: 'b3', title: 'Road Hero', icon: '🚦' },
+    { id: 'b1', title: 'Route Scout', icon: '🧭', description: 'Explored 10+ local corridors', unlocked: true },
+    { id: 'b2', title: 'Fare Watcher', icon: '💰', description: 'Reported 5+ verified transit fares', unlocked: true },
+    { id: 'b3', title: 'Safety Reporter', icon: '🚨', description: 'Helped commuters navigate hazards', unlocked: true },
+    { id: 'b4', title: 'Transit Insider', icon: '🚌', description: 'Accurate hub directions contributor', unlocked: false },
+    { id: 'b5', title: 'Community Champion', icon: '🌟', description: '50+ community confirmed votes', unlocked: false },
   ],
   savedRoutes: [
     { id: 'sr-1', from: 'Ojota', to: 'Yaba', label: 'Home → Work', cityId: 'lagos' },
     { id: 'sr-2', from: 'Ikeja', to: 'Lekki Phase 1', label: 'Home → Client', cityId: 'lagos' },
   ],
   tripHistory: [
-    { id: 'th-1', from: 'Ojota', to: 'Yaba', date: 'Yesterday', farePaid: 900, currencySymbol: '₦', mode: 'Danfo' },
-    { id: 'th-2', from: 'Ikeja', to: 'CMS', date: '2 days ago', farePaid: 800, currencySymbol: '₦', mode: 'Danfo' },
+    { id: 'th-1', from: 'Ojota', to: 'Yaba', date: 'Yesterday', farePaid: 950, currencySymbol: '₦', mode: 'Danfo + BRT', wasAccurate: true },
+    { id: 'th-2', from: 'Ikeja', to: 'CMS', date: '2 days ago', farePaid: 800, currencySymbol: '₦', mode: 'Danfo', wasAccurate: true },
   ],
   emergencyContacts: [
     { id: 'ec-1', name: 'Sister Chidinma', phone: '08031234567', relationship: 'Family' },
@@ -80,6 +90,8 @@ export default function App() {
   const [isQuickFareModalOpen, setIsQuickFareModalOpen] = useState(false);
   const [isSOSModalOpen, setIsSOSModalOpen] = useState(false);
   const [isCitySelectorOpen, setIsCitySelectorOpen] = useState(false);
+  const [isPhoneAuthOpen, setIsPhoneAuthOpen] = useState(false);
+  const [isAdminDispatchOpen, setIsAdminDispatchOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(() => {
     return !localStorage.getItem('routewise_onboarded');
   });
@@ -127,11 +139,18 @@ export default function App() {
   const currentCountry: CountryConfig = getCountryById(selectedCountryId);
   const currentCity: CityConfig = getCityById(selectedCityId);
 
-  // Route calculation & selection
-  const handleFindRoute = (from: string, to: string) => {
-    const generated = generateLocalRoute(from, to, currentCity.id);
-    setCurrentRoute(generated);
+  // Route calculation & selection (Asynchronous real road geometry calculation)
+  const handleFindRoute = async (from: string, to: string) => {
+    const fastFallback = generateLocalRoute(from, to, currentCity.id);
+    setCurrentRoute(fastFallback);
     setActiveTab('journey');
+
+    try {
+      const fullRoute = await generateLocalRouteAsync(from, to, currentCity.id);
+      setCurrentRoute(fullRoute);
+    } catch (err) {
+      // Retain fast fallback
+    }
   };
 
   // Save / Bookmark route
@@ -183,24 +202,66 @@ export default function App() {
     };
 
     setCommunityPosts((prev) => [newPost, ...prev]);
+
+    // Record fare observation in intelligence service
+    if (newReportData.category === 'Fare' && newReportData.fareAmount) {
+      fareIntelligenceService.recordObservation({
+        origin: currentRoute?.from || currentCity.popularJunctions[0] || 'Origin',
+        destination: currentRoute?.to || currentCity.popularJunctions[1] || 'Destination',
+        transportMode: newReportData.transportMode || 'Danfo',
+        cityId: currentCity.id,
+        countryId: currentCountry.id,
+        fare: newReportData.fareAmount,
+        currencySymbol: currentCountry.currencySymbol,
+        confidence: 'High',
+      });
+    }
+
     setUserProfile((prev) => ({
       ...prev,
       usefulContributions: prev.usefulContributions + 5,
     }));
+  };
 
-    // If report has fare, update current route if matches
-    if (newReportData.category === 'Fare' && newReportData.fareAmount && currentRoute) {
-      if (newReportData.locationOrRoute.toLowerCase().includes(currentRoute.from.toLowerCase())) {
-        setCurrentRoute((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            reportCount: prev.reportCount + 1,
-            lastUpdated: 'Just now',
-          };
-        });
-      }
+  // Post trip feedback
+  const handleTripFeedback = (feedback: {
+    origin: string;
+    destination: string;
+    fareEstimateAccurate: boolean;
+    directionsUseful: boolean;
+    actualFarePaid?: number;
+    mode: string;
+  }) => {
+    if (feedback.actualFarePaid) {
+      fareIntelligenceService.recordObservation({
+        origin: feedback.origin,
+        destination: feedback.destination,
+        transportMode: feedback.mode,
+        cityId: currentCity.id,
+        countryId: currentCountry.id,
+        fare: feedback.actualFarePaid,
+        currencySymbol: currentCountry.currencySymbol,
+        confidence: 'High',
+      });
     }
+
+    const newTrip = {
+      id: `trip-${Date.now()}`,
+      from: feedback.origin,
+      to: feedback.destination,
+      date: 'Just now',
+      farePaid: feedback.actualFarePaid || currentRoute?.fareMin || 500,
+      currencySymbol: currentCountry.currencySymbol,
+      mode: feedback.mode,
+      wasAccurate: feedback.fareEstimateAccurate,
+    };
+
+    setUserProfile((prev) => ({
+      ...prev,
+      tripHistory: [newTrip, ...prev.tripHistory],
+      usefulContributions: prev.usefulContributions + 8,
+      confirmedReports: prev.confirmedReports + 1,
+    }));
   };
 
   // Star & Confirm interactions
@@ -277,15 +338,29 @@ export default function App() {
       selectedCityId: city.id,
     }));
 
-    // If city has popular routes, update default active route
     if (city.popularRoutes.length > 0) {
       const defaultRt = city.popularRoutes[0];
-      const generated = generateLocalRoute(defaultRt.from, defaultRt.to, city.id);
-      setCurrentRoute(generated);
+      handleFindRoute(defaultRt.from, defaultRt.to);
     } else if (city.popularJunctions.length >= 2) {
-      const generated = generateLocalRoute(city.popularJunctions[0], city.popularJunctions[1], city.id);
-      setCurrentRoute(generated);
+      handleFindRoute(city.popularJunctions[0], city.popularJunctions[1]);
     }
+  };
+
+  const handleSuccessPhoneAuth = (phone: string, userId: string) => {
+    setUserProfile((prev) => ({
+      ...prev,
+      id: userId,
+      phoneNumber: phone,
+      isPhoneVerified: true,
+      usefulContributions: prev.usefulContributions + 20,
+      badges: prev.badges.map((b) => (b.id === 'b1' ? { ...b, unlocked: true } : b)),
+    }));
+  };
+
+  const handleUpdatePostStatus = (postId: string, newStatus: ReportStatus) => {
+    setCommunityPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, status: newStatus } : p))
+    );
   };
 
   const handleCompleteOnboarding = () => {
@@ -333,7 +408,7 @@ export default function App() {
           <div className="bg-[#1A1A1A] text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-xs border-b border-gray-800">
             <span className="flex items-center gap-1.5">
               <span className="text-[#FF6321]">📶</span>
-              <span className="tracking-tight uppercase text-[11px]">OFFLINE MODE • Cached Transit & Fare Intel</span>
+              <span className="tracking-tight uppercase text-[11px]">OFFLINE MODE • Local GIS & Cached Fare Engine</span>
             </span>
             <button
               onClick={handleToggleOfflineSimulator}
@@ -368,6 +443,9 @@ export default function App() {
               onTriggerSOS={() => setIsSOSModalOpen(true)}
               onSaveRoute={handleSaveRoute}
               isSaved={isCurrentRouteSaved}
+              communityPosts={communityPosts}
+              currentCountry={currentCountry}
+              onSubmitTripFeedback={handleTripFeedback}
             />
           )}
 
@@ -393,13 +471,15 @@ export default function App() {
               onDeleteSavedRoute={handleDeleteSavedRoute}
               onOpenOnboarding={() => setIsOnboardingOpen(true)}
               onOpenCitySelector={() => setIsCitySelectorOpen(true)}
+              onOpenPhoneAuth={() => setIsPhoneAuthOpen(true)}
+              onOpenAdminDispatch={() => setIsAdminDispatchOpen(true)}
               isOffline={isOffline}
               onToggleOfflineSimulator={handleToggleOfflineSimulator}
             />
           )}
         </main>
 
-        {/* Bottom Navigation (4 Primary Tabs Only) */}
+        {/* Bottom Navigation */}
         <BottomNav
           activeTab={activeTab}
           onChangeTab={setActiveTab}
@@ -449,6 +529,22 @@ export default function App() {
         <OnboardingModal
           isOpen={isOnboardingOpen}
           onComplete={handleCompleteOnboarding}
+        />
+
+        <AuthPhoneModal
+          isOpen={isPhoneAuthOpen}
+          onClose={() => setIsPhoneAuthOpen(false)}
+          onSuccessAuth={handleSuccessPhoneAuth}
+          currentCountry={currentCountry}
+        />
+
+        <AdminDispatchModal
+          isOpen={isAdminDispatchOpen}
+          onClose={() => setIsAdminDispatchOpen(false)}
+          posts={communityPosts}
+          onUpdatePostStatus={handleUpdatePostStatus}
+          currentCity={currentCity}
+          currentCountry={currentCountry}
         />
       </div>
     </div>

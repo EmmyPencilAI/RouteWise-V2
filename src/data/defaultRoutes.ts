@@ -1,200 +1,213 @@
-import { RouteOption, RouteStep, CityConfig } from '../types';
+import { RouteOption, RouteStep, GeoCoordinate } from '../types';
 import { getCityById, getCountryById } from './cities';
+import { getLandmarkCoordinate } from './coordinates';
+import { routingProvider } from '../services/routing/osrmRoutingProvider';
 
-export const PRESET_ROUTES: Record<string, RouteOption> = {
-  // Lagos primary
-  'ojota-yaba': {
-    id: 'route-ojota-yaba',
-    from: 'Ojota',
-    to: 'Yaba',
-    cityId: 'lagos',
-    countryId: 'nigeria',
-    type: 'BALANCED',
-    totalMinutesMin: 35,
-    totalMinutesMax: 50,
-    fareMin: 800,
-    fareMax: 1100,
-    currencySymbol: '₦',
-    transfersCount: 1,
-    walkingDistanceMeters: 180,
-    confidence: 'High confidence',
-    reportCount: 38,
-    lastUpdated: '12m ago',
-    steps: [
-      {
-        id: 'step-1',
-        stepNumber: 1,
-        mode: 'Danfo',
-        from: 'Ojota Motor Park',
-        to: 'Anthony Bus Stop',
-        boardLandmark: 'Ojota New Garage (Under pedestrian bridge)',
-        dropLandmark: 'Anthony Bus Stop (Opposite GTBank)',
-        estimatedMinutes: 15,
-        fareMin: 400,
-        fareMax: 500,
-        advice: 'Hold exact ₦500 note to avoid conductor change delay.',
-      },
-      {
-        id: 'step-2',
-        stepNumber: 2,
-        mode: 'Danfo',
-        from: 'Anthony Bus Stop',
-        to: 'Yaba (Commercial Ave / Tech Hub)',
-        boardLandmark: 'Anthony service lane towards Fadeyi/Yaba',
-        dropLandmark: 'Yaba Bus Stop (Tejuosho Market Gate)',
-        estimatedMinutes: 25,
-        fareMin: 400,
-        fareMax: 600,
-        advice: 'Alight before railway crossing if heading to Sabo Tech Hub.',
-      },
-    ],
-  },
-  // Abuja primary
-  'wuse-area1': {
-    id: 'route-wuse-area1',
-    from: 'Wuse 2',
-    to: 'Area 1',
-    cityId: 'abuja',
-    countryId: 'nigeria',
-    type: 'BALANCED',
-    totalMinutesMin: 20,
-    totalMinutesMax: 30,
-    fareMin: 500,
-    fareMax: 700,
-    currencySymbol: '₦',
-    transfersCount: 1,
-    walkingDistanceMeters: 100,
-    confidence: 'High confidence',
-    reportCount: 24,
-    lastUpdated: '8m ago',
-    steps: [
-      {
-        id: 'step-1',
-        stepNumber: 1,
-        mode: 'Along',
-        from: 'Banex Plaza, Wuse 2',
-        to: 'Berger Junction',
-        boardLandmark: 'Opposite Banex side gate',
-        dropLandmark: 'Berger Roundabout',
-        estimatedMinutes: 10,
-        fareMin: 250,
-        fareMax: 350,
-        advice: 'Flag green cabs heading "Berger Along".',
-      },
-      {
-        id: 'step-2',
-        stepNumber: 2,
-        mode: 'Along',
-        from: 'Berger Junction',
-        to: 'Area 1 Roundabout',
-        boardLandmark: 'Under Berger flyover, Airport Road arm',
-        dropLandmark: 'Area 1 Roundabout (Near Shopping Complex)',
-        estimatedMinutes: 15,
-        fareMin: 250,
-        fareMax: 350,
-        advice: 'State exact section (Area 1 Post Office or Roundabout).',
-      },
-    ],
-  },
-  // Port Harcourt
-  'choba-mile1': {
-    id: 'route-choba-mile1',
-    from: 'Choba',
-    to: 'Mile 1 Market',
-    cityId: 'portharcourt',
-    countryId: 'nigeria',
-    type: 'BALANCED',
-    totalMinutesMin: 40,
-    totalMinutesMax: 60,
-    fareMin: 700,
-    fareMax: 1000,
-    currencySymbol: '₦',
-    transfersCount: 1,
-    walkingDistanceMeters: 150,
-    confidence: 'High confidence',
-    reportCount: 19,
-    lastUpdated: '20m ago',
-    steps: [
+export async function generateLocalRouteAsync(
+  from: string,
+  to: string,
+  cityId: string = 'lagos'
+): Promise<RouteOption> {
+  const city = getCityById(cityId);
+  const country = getCountryById(city.countryId);
+  const currencySymbol = country.currencySymbol;
+
+  const fromCoord = getLandmarkCoordinate(from, cityId);
+  const toCoord = getLandmarkCoordinate(to, cityId);
+
+  // Available transit modes in this city
+  const availableModes = city.availableModes.filter((m) => m !== 'Walk');
+  const primaryMode = availableModes[0] || 'Danfo';
+  const secondaryMode = availableModes.length > 1 ? availableModes[1] : primaryMode;
+  const thirdMode = availableModes.length > 2 ? availableModes[2] : (availableModes[0] || 'BRT');
+
+  // Multi-leg intermediate hubs for realistic transit legs
+  const isOjotaYaba = from.toLowerCase().includes('ojota') && to.toLowerCase().includes('yaba');
+
+  let steps: RouteStep[] = [];
+  let totalFareMin = 0;
+  let totalFareMax = 0;
+  let allRoadGeometry: GeoCoordinate[] = [];
+
+  if (isOjotaYaba) {
+    // 3-LEG OJOTA -> YABA TRANSIT NETWORK SPECIFICATION
+    // Leg 1: Keke (Ojota -> Anthony) ₦250–₦350
+    // Leg 2: Danfo (Anthony -> Oshodi) ₦400–₦550
+    // Leg 3: BRT (Oshodi -> Yaba) ₦300–₦500
+    // Total: ₦950–₦1,400
+    const ojotaCoord = getLandmarkCoordinate('Ojota', 'lagos');
+    const anthonyCoord = getLandmarkCoordinate('Anthony', 'lagos');
+    const oshodiCoord = getLandmarkCoordinate('Oshodi', 'lagos');
+    const yabaCoord = getLandmarkCoordinate('Yaba', 'lagos');
+
+    const leg1Route = await routingProvider.getRoute(
+      { lat: ojotaCoord.lat, lng: ojotaCoord.lng, name: 'Ojota' },
+      { lat: anthonyCoord.lat, lng: anthonyCoord.lng, name: 'Anthony' }
+    );
+    const leg2Route = await routingProvider.getRoute(
+      { lat: anthonyCoord.lat, lng: anthonyCoord.lng, name: 'Anthony' },
+      { lat: oshodiCoord.lat, lng: oshodiCoord.lng, name: 'Oshodi' }
+    );
+    const leg3Route = await routingProvider.getRoute(
+      { lat: oshodiCoord.lat, lng: oshodiCoord.lng, name: 'Oshodi' },
+      { lat: yabaCoord.lat, lng: yabaCoord.lng, name: 'Yaba' }
+    );
+
+    steps = [
       {
         id: 'step-1',
         stepNumber: 1,
         mode: 'Keke',
-        from: 'Choba (Uniport Gate 1)',
-        to: 'Rumuokoro Flyover',
-        boardLandmark: 'Opposite Uniport Delta Park gate',
-        dropLandmark: 'Rumuokoro Under-flyover transit park',
-        estimatedMinutes: 20,
-        fareMin: 350,
-        fareMax: 500,
-        advice: 'Board direct keke to avoid intermediate stops at Alakahia.',
+        from: 'Ojota',
+        to: 'Anthony',
+        boardLandmark: 'Ojota Junction (Under pedestrian bridge)',
+        dropLandmark: 'Anthony',
+        startCoordinate: [ojotaCoord.lat, ojotaCoord.lng],
+        endCoordinate: [anthonyCoord.lat, anthonyCoord.lng],
+        roadGeometry: leg1Route.roadGeometry,
+        fareMin: 250,
+        fareMax: 350,
+        advice: 'Hold exact ₦300 or ₦350 note to avoid conductor delay.',
+        distanceMeters: leg1Route.distanceMeters,
       },
       {
         id: 'step-2',
         stepNumber: 2,
-        mode: 'Along',
-        from: 'Rumuokoro Flyover',
-        to: 'Mile 1 Market (Diobu)',
-        boardLandmark: 'Ikwerre Road service lane towards Mile 1',
-        dropLandmark: 'Mile 1 Market Flyover',
-        estimatedMinutes: 25,
-        fareMin: 350,
-        fareMax: 500,
-        advice: 'Check morning market congestion around Ikwerre Road.',
+        mode: 'Danfo',
+        from: 'Anthony',
+        to: 'Oshodi',
+        boardLandmark: 'Anthony Bus Stop',
+        dropLandmark: 'Oshodi',
+        startCoordinate: [anthonyCoord.lat, anthonyCoord.lng],
+        endCoordinate: [oshodiCoord.lat, oshodiCoord.lng],
+        roadGeometry: leg2Route.roadGeometry,
+        fareMin: 400,
+        fareMax: 550,
+        advice: 'Alight at Oshodi Interchange terminal platform.',
+        distanceMeters: leg2Route.distanceMeters,
       },
-    ],
-  },
-  // Ibadan
-  'ui-dugbe': {
-    id: 'route-ui-dugbe',
-    from: 'UI Gate',
-    to: 'Dugbe',
-    cityId: 'ibadan',
-    countryId: 'nigeria',
-    type: 'BALANCED',
-    totalMinutesMin: 25,
-    totalMinutesMax: 35,
-    fareMin: 400,
-    fareMax: 600,
-    currencySymbol: '₦',
-    transfersCount: 1,
-    walkingDistanceMeters: 120,
-    confidence: 'High confidence',
-    reportCount: 22,
-    lastUpdated: '15m ago',
-    steps: [
       {
-        id: 'step-1',
+        id: 'step-3',
+        stepNumber: 3,
+        mode: 'BRT',
+        from: 'Oshodi',
+        to: 'Yaba',
+        boardLandmark: 'Oshodi BRT Terminal',
+        dropLandmark: 'Yaba (Commercial Ave)',
+        startCoordinate: [oshodiCoord.lat, oshodiCoord.lng],
+        endCoordinate: [yabaCoord.lat, yabaCoord.lng],
+        roadGeometry: leg3Route.roadGeometry,
+        fareMin: 300,
+        fareMax: 500,
+        advice: 'Tap Cowry card or buy paper token before boarding.',
+        distanceMeters: leg3Route.distanceMeters,
+      },
+    ];
+
+    allRoadGeometry = [...leg1Route.roadGeometry, ...leg2Route.roadGeometry, ...leg3Route.roadGeometry];
+    totalFareMin = 950;
+    totalFareMax = 1400;
+  } else {
+    // Dynamic 2-leg city corridor
+    const intermediateHubName = city.popularJunctions.find((j) => j !== from && j !== to) || 'Central Transit Hub';
+    const hubCoord = getLandmarkCoordinate(intermediateHubName, cityId);
+
+    // Currency scale multiplier
+    let baseMultiplier = 1;
+    if (country.code === 'GH') baseMultiplier = 0.035;
+    else if (country.code === 'KE') baseMultiplier = 0.35;
+    else if (country.code === 'RW') baseMultiplier = 3.2;
+
+    const leg1Min = Math.round((300 * baseMultiplier) / 10) * 10;
+    const leg1Max = Math.round((450 * baseMultiplier) / 10) * 10;
+    const leg2Min = Math.round((350 * baseMultiplier) / 10) * 10;
+    const leg2Max = Math.round((550 * baseMultiplier) / 10) * 10;
+
+    const leg1Route = await routingProvider.getRoute(
+      { lat: fromCoord.lat, lng: fromCoord.lng, name: from },
+      { lat: hubCoord.lat, lng: hubCoord.lng, name: intermediateHubName }
+    );
+    const leg2Route = await routingProvider.getRoute(
+      { lat: hubCoord.lat, lng: hubCoord.lng, name: intermediateHubName },
+      { lat: toCoord.lat, lng: toCoord.lng, name: to }
+    );
+
+    steps = [
+      {
+        id: `step-${Date.now()}-1`,
         stepNumber: 1,
-        mode: 'Micra',
-        from: 'UI Main Gate',
-        to: 'Mokola Roundabout',
-        boardLandmark: 'Directly under UI Pedestrian Flyover',
-        dropLandmark: 'Mokola Overhead Bridge',
-        estimatedMinutes: 12,
-        fareMin: 200,
-        fareMax: 300,
-        advice: 'Micra loads fast. 2 in front, 4 in back.',
+        mode: primaryMode,
+        from: from,
+        to: intermediateHubName,
+        boardLandmark: `${from} Main Boarding Junction`,
+        dropLandmark: `${intermediateHubName} Station`,
+        startCoordinate: [fromCoord.lat, fromCoord.lng],
+        endCoordinate: [hubCoord.lat, hubCoord.lng],
+        roadGeometry: leg1Route.roadGeometry,
+        fareMin: Math.max(10, leg1Min),
+        fareMax: Math.max(20, leg1Max),
+        advice: city.localDialectTip || 'Hold exact change when boarding.',
+        distanceMeters: leg1Route.distanceMeters,
       },
       {
-        id: 'step-2',
+        id: `step-${Date.now()}-2`,
         stepNumber: 2,
-        mode: 'Micra',
-        from: 'Mokola Roundabout',
-        to: 'Dugbe (Cocoa House)',
-        boardLandmark: 'Mokola market park arm',
-        dropLandmark: 'Cocoa Dome / Dugbe Post Office',
-        estimatedMinutes: 15,
-        fareMin: 200,
-        fareMax: 300,
-        advice: 'Alight at Cocoa House roundabout.',
+        mode: secondaryMode,
+        from: intermediateHubName,
+        to: to,
+        boardLandmark: `${intermediateHubName} Connecting Platform`,
+        dropLandmark: `${to} Bus Stop`,
+        startCoordinate: [hubCoord.lat, hubCoord.lng],
+        endCoordinate: [toCoord.lat, toCoord.lng],
+        roadGeometry: leg2Route.roadGeometry,
+        fareMin: Math.max(10, leg2Min),
+        fareMax: Math.max(20, leg2Max),
+        advice: `Inform conductor/driver before arriving at ${to}.`,
+        distanceMeters: leg2Route.distanceMeters,
       },
-    ],
-  },
-};
+    ];
+
+    allRoadGeometry = [...leg1Route.roadGeometry, ...leg2Route.roadGeometry];
+    totalFareMin = leg1Min + leg2Min;
+    totalFareMax = leg1Max + leg2Max;
+  }
+
+  // Calculate safer alternative route bypassing congested corridors
+  const altRouteResult = await routingProvider.getRoute(
+    { lat: fromCoord.lat, lng: fromCoord.lng, name: from },
+    { lat: toCoord.lat, lng: toCoord.lng, name: to },
+    { avoidIncidents: true }
+  );
+
+  let totalDistance = 0;
+  for (const step of steps) {
+    totalDistance += step.distanceMeters || 1200;
+  }
+
+  return {
+    id: `route-${Date.now()}`,
+    from,
+    to,
+    cityId: city.id,
+    countryId: country.id,
+    type: 'BALANCED',
+    fareMin: totalFareMin,
+    fareMax: totalFareMax,
+    currencySymbol,
+    transfersCount: steps.length - 1,
+    totalDistanceMeters: totalDistance,
+    confidence: 'High confidence',
+    reportCount: 38,
+    lastUpdated: '8m ago',
+    riskScore: 'LOW',
+    roadGeometry: allRoadGeometry,
+    alternativeRoadGeometry: altRouteResult.roadGeometry,
+    steps,
+  };
+}
 
 /**
- * Universal dynamic route generator that respects the city, country, 
- * available local transport modes, and currency configuration.
+ * Synchronous initial fallback for fast boot
  */
 export function generateLocalRoute(
   from: string,
@@ -205,88 +218,89 @@ export function generateLocalRoute(
   const country = getCountryById(city.countryId);
   const currencySymbol = country.currencySymbol;
 
-  // Check preset route key
-  const normalizedKey = `${from.toLowerCase().replace(/[^a-z0-9]/g, '')}-${to.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-  for (const [key, val] of Object.entries(PRESET_ROUTES)) {
-    if (key.includes(normalizedKey) || normalizedKey.includes(key.replace('-', ''))) {
-      return {
-        ...val,
-        from,
-        to,
-        cityId: city.id,
-        countryId: country.id,
-        currencySymbol,
-      };
-    }
-  }
+  const ojotaCoord = getLandmarkCoordinate('Ojota', 'lagos');
+  const anthonyCoord = getLandmarkCoordinate('Anthony', 'lagos');
+  const oshodiCoord = getLandmarkCoordinate('Oshodi', 'lagos');
+  const yabaCoord = getLandmarkCoordinate('Yaba', 'lagos');
 
-  // Derive primary and secondary modes available in this city
-  const availableModes = city.availableModes.length > 0 ? city.availableModes : ['Bus', 'Taxi', 'Walk'];
-  const primaryMode = availableModes[0] || 'Bus';
-  const secondaryMode = availableModes.length > 1 ? availableModes[1] : (availableModes[0] || 'Taxi');
-
-  // Base fare calculation adapted to country economy scale
-  let baseMultiplier = 1;
-  if (country.code === 'GH') baseMultiplier = 0.035; // GHS
-  else if (country.code === 'KE') baseMultiplier = 0.35; // KES
-  else if (country.code === 'RW') baseMultiplier = 3.2; // RWF
-  else baseMultiplier = 1; // NGN
-
-  const rawFareMin = Math.round((500 * baseMultiplier) / 10) * 10;
-  const rawFareMax = Math.round((800 * baseMultiplier) / 10) * 10;
-  const leg1Min = Math.round((250 * baseMultiplier) / 10) * 10;
-  const leg1Max = Math.round((400 * baseMultiplier) / 10) * 10;
-  const leg2Min = rawFareMin - leg1Min;
-  const leg2Max = rawFareMax - leg1Max;
-
-  const intermediateHub = city.popularJunctions.find((j) => j !== from && j !== to) || 'Central Interchange';
-
-  const steps: RouteStep[] = [
-    {
-      id: `step-${Date.now()}-1`,
-      stepNumber: 1,
-      mode: primaryMode,
-      from: from,
-      to: intermediateHub,
-      boardLandmark: `Opposite ${from} landmark / main boarding arm`,
-      dropLandmark: `${intermediateHub} transit hub underbridge`,
-      estimatedMinutes: 18,
-      fareMin: Math.max(10, leg1Min),
-      fareMax: Math.max(20, leg1Max),
-      advice: city.localDialectTip || 'Hold exact change when boarding.',
-    },
-    {
-      id: `step-${Date.now()}-2`,
-      stepNumber: 2,
-      mode: secondaryMode,
-      from: intermediateHub,
-      to: to,
-      boardLandmark: `${intermediateHub} connecting platform / service lane`,
-      dropLandmark: `${to} main drop point`,
-      estimatedMinutes: 22,
-      fareMin: Math.max(10, leg2Min),
-      fareMax: Math.max(20, leg2Max),
-      advice: `Inform operator before reaching ${to} destination stop.`,
-    },
+  const defaultRoadGeometry: GeoCoordinate[] = [
+    [6.5828, 3.3768],
+    [6.5740, 3.3720],
+    [6.5655, 3.3688],
+    [6.5560, 3.3680],
+    [6.5492, 3.3486],
+    [6.5390, 3.3672],
+    [6.5298, 3.3670],
+    [6.5200, 3.3685],
+    [6.5098, 3.3715],
   ];
 
   return {
-    id: `route-${Date.now()}`,
-    from,
-    to,
+    id: 'route-ojota-yaba-initial',
+    from: from || 'Ojota',
+    to: to || 'Yaba',
     cityId: city.id,
     countryId: country.id,
     type: 'BALANCED',
-    totalMinutesMin: 35,
-    totalMinutesMax: 50,
-    fareMin: Math.max(20, rawFareMin),
-    fareMax: Math.max(30, rawFareMax),
+    fareMin: 950,
+    fareMax: 1400,
     currencySymbol,
-    transfersCount: 1,
-    walkingDistanceMeters: 160,
+    transfersCount: 2,
+    totalDistanceMeters: 8400,
     confidence: 'High confidence',
-    reportCount: 16,
-    lastUpdated: 'Just now',
-    steps,
+    reportCount: 42,
+    lastUpdated: '5m ago',
+    riskScore: 'LOW',
+    roadGeometry: defaultRoadGeometry,
+    steps: [
+      {
+        id: 'step-1',
+        stepNumber: 1,
+        mode: 'Keke',
+        from: from || 'Ojota',
+        to: 'Anthony',
+        boardLandmark: 'Ojota Junction',
+        dropLandmark: 'Anthony',
+        startCoordinate: [ojotaCoord.lat, ojotaCoord.lng],
+        endCoordinate: [anthonyCoord.lat, anthonyCoord.lng],
+        roadGeometry: defaultRoadGeometry.slice(0, 3),
+        fareMin: 250,
+        fareMax: 350,
+        advice: 'Board Ojota underbridge keke park heading Anthony.',
+        distanceMeters: 2200,
+      },
+      {
+        id: 'step-2',
+        stepNumber: 2,
+        mode: 'Danfo',
+        from: 'Anthony',
+        to: 'Oshodi',
+        boardLandmark: 'Anthony Bus Stop',
+        dropLandmark: 'Oshodi',
+        startCoordinate: [anthonyCoord.lat, anthonyCoord.lng],
+        endCoordinate: [oshodiCoord.lat, oshodiCoord.lng],
+        roadGeometry: defaultRoadGeometry.slice(2, 6),
+        fareMin: 400,
+        fareMax: 550,
+        advice: 'Take commercial yellow bus on the service lane.',
+        distanceMeters: 3800,
+      },
+      {
+        id: 'step-3',
+        stepNumber: 3,
+        mode: 'BRT',
+        from: 'Oshodi',
+        to: to || 'Yaba',
+        boardLandmark: 'Oshodi BRT Terminal',
+        dropLandmark: 'Yaba',
+        startCoordinate: [oshodiCoord.lat, oshodiCoord.lng],
+        endCoordinate: [yabaCoord.lat, yabaCoord.lng],
+        roadGeometry: defaultRoadGeometry.slice(5),
+        fareMin: 300,
+        fareMax: 500,
+        advice: 'Direct BRT to Yaba bus station.',
+        distanceMeters: 2400,
+      },
+    ],
   };
 }
